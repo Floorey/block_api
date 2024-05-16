@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -20,13 +21,19 @@ type Block struct {
 	Hash      string `json:"hash"`
 	Nonce     int    `json:"nonce"`
 }
+
 type Blockchain struct {
 	Chain []Block `json:"chain"`
+	mu    sync.Mutex
 }
 
 var blockchain Blockchain
 
 func getBlocksHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Handling getBlocks request...")
+	blockchain.mu.Lock()
+	defer blockchain.mu.Unlock()
+
 	w.Header().Set("Content-Type", "application/json")
 	err := json.NewEncoder(w).Encode(blockchain.Chain)
 	if err != nil {
@@ -34,7 +41,12 @@ func getBlocksHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
 func mineBlockHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Handling mineBlock request...")
+	blockchain.mu.Lock()
+	defer blockchain.mu.Unlock()
+
 	prevBlock := blockchain.Chain[len(blockchain.Chain)-1]
 
 	newBlock := generateBlock(prevBlock, "Some test Data")
@@ -48,7 +60,12 @@ func mineBlockHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
 func addTransactionHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Handling addTransaction request...")
+	blockchain.mu.Lock()
+	defer blockchain.mu.Unlock()
+
 	message := "New transaction added."
 
 	w.Header().Set("Content-Type", "application/json")
@@ -58,7 +75,12 @@ func addTransactionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
 func getChainHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Handling getChain request...")
+	blockchain.mu.Lock()
+	defer blockchain.mu.Unlock()
+
 	w.Header().Set("Content-Type", "application/json")
 	err := json.NewEncoder(w).Encode(blockchain)
 	if err != nil {
@@ -66,7 +88,9 @@ func getChainHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
 func generateBlock(prevBlock Block, data string) Block {
+	log.Println("Generating new block...")
 	var newBlock Block
 
 	newBlock.Index = prevBlock.Index + 1
@@ -85,6 +109,7 @@ func generateBlock(prevBlock Block, data string) Block {
 	}
 	return newBlock
 }
+
 func calculateHash(block Block) string {
 	record := strconv.Itoa(block.Index) + block.Timestamp + block.Data + block.PrevHash + strconv.Itoa(block.Nonce)
 	h := sha256.New()
@@ -92,16 +117,20 @@ func calculateHash(block Block) string {
 	hashed := h.Sum(nil)
 	return hex.EncodeToString(hashed)
 }
+
 func isValidHash(hash string) bool {
 	return hash[:4] == "0000"
 }
+
 func main() {
+	log.Println("Starting server...")
+
 	router := mux.NewRouter()
 
 	router.HandleFunc("/blocks", getBlocksHandler).Methods("GET")
 	router.HandleFunc("/mine_block", mineBlockHandler).Methods("POST")
 	router.HandleFunc("/add_transaction", addTransactionHandler).Methods("POST")
-	router.HandleFunc("/chain", getBlocksHandler).Methods("GET")
+	router.HandleFunc("/chain", getChainHandler).Methods("GET")
 
 	// initialize blockchain
 
